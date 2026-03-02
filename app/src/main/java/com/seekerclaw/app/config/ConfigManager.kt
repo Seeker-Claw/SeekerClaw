@@ -980,6 +980,357 @@ object ConfigManager {
         saveSkillManifest(manifestFile, manifest)
     }
 
+    // ==================== Skill Export ====================
+
+    /**
+     * Returns the set of skill directory names tracked in skills-manifest.json
+     * (i.e., default/bundled skills). User-added skills are NOT in the manifest.
+     */
+    fun getDefaultSkillNames(context: Context): Set<String> {
+        val manifestFile = File(File(context.filesDir, "workspace"), "skills-manifest.json")
+        if (!manifestFile.exists()) return emptySet()
+        return try {
+            val json = JSONObject(manifestFile.readText())
+            json.keys().asSequence().toSet()
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to read skill manifest for default names", e)
+            emptySet()
+        }
+    }
+
+    /**
+     * Returns a map of default skill name → content hash from skills-manifest.json.
+     * Used to detect user-modified default skills (hash differs from manifest).
+     */
+    fun getDefaultSkillHashes(context: Context): Map<String, String> {
+        val manifestFile = File(File(context.filesDir, "workspace"), "skills-manifest.json")
+        if (!manifestFile.exists()) return emptyMap()
+        return try {
+            val json = JSONObject(manifestFile.readText())
+            val result = mutableMapOf<String, String>()
+            for (key in json.keys()) {
+                val entry = json.getJSONObject(key)
+                val hash = entry.optString("hash", "")
+                if (hash.isNotEmpty()) result[key] = hash
+            }
+            result
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to read skill manifest hashes", e)
+            emptyMap()
+        }
+    }
+
+    /**
+     * Export a single skill as a raw .md file at the given URI.
+     * Reads the SKILL.md content and writes it directly — shareable via Telegram.
+     */
+    fun exportSkill(context: Context, uri: Uri, skillDirName: String): Boolean {
+        val skillsDir = File(File(context.filesDir, "workspace"), "skills")
+        val skillFile = File(File(skillsDir, skillDirName), "SKILL.md").takeIf { it.exists() }
+            ?: File(skillsDir, "$skillDirName.md").takeIf { it.exists() }
+
+        if (skillFile == null) {
+            Log.e(TAG, "Skill file not found for: $skillDirName")
+            return false
+        }
+
+        return try {
+            val outputStream = context.contentResolver.openOutputStream(uri)
+            if (outputStream == null) {
+                Log.e(TAG, "Failed to open output stream for skill export")
+                return false
+            }
+            outputStream.use { out ->
+                skillFile.inputStream().use { it.copyTo(out) }
+            }
+            Log.i(TAG, "Skill $skillDirName exported as .md")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to export skill $skillDirName", e)
+            false
+        }
+    }
+
+    /**
+     * Export all user-added skills as a ZIP at the given URI.
+     * Only includes skills NOT in skills-manifest.json (user-added only).
+     */
+    fun exportUserSkills(context: Context, uri: Uri): Boolean {
+        val workspaceDir = File(context.filesDir, "workspace")
+        val skillsDir = File(workspaceDir, "skills")
+        if (!skillsDir.exists()) return false
+
+        val defaultNames = getDefaultSkillNames(context)
+
+        // Pre-check: any user skills to export?
+        val userEntries = skillsDir.listFiles()?.filter { entry ->
+            when {
+                entry.isDirectory && entry.name !in defaultNames -> true
+                entry.isFile && entry.name.endsWith(".md") -> true
+                else -> false
+            }
+        } ?: emptyList()
+        if (userEntries.isEmpty()) {
+            Log.i(TAG, "No user skills to export")
+            return false
+        }
+
+        return try {
+            val outputStream = context.contentResolver.openOutputStream(uri)
+            if (outputStream == null) {
+                Log.e(TAG, "Failed to open output stream for skills export")
+                return false
+            }
+            outputStream.use { out ->
+                ZipOutputStream(out).use { zip ->
+                    userEntries.forEach { entry ->
+                        if (entry.isDirectory) {
+                            addDirectoryToZip(zip, entry, skillsDir)
+                        } else {
+                            zip.putNextEntry(ZipEntry(entry.name))
+                            entry.inputStream().use { it.copyTo(zip) }
+                            zip.closeEntry()
+                        }
+                    }
+                }
+            }
+            Log.i(TAG, "Exported ${userEntries.size} user skills")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to export user skills", e)
+            false
+        }
+    }
+
+    private fun addDirectoryToZip(zip: ZipOutputStream, dir: File, baseDir: File) {
+        dir.walkTopDown().filter { it.isFile }.forEach { file ->
+            val relativePath = file.relativeTo(baseDir).path.replace("\\", "/")
+            zip.putNextEntry(ZipEntry(relativePath))
+            file.inputStream().use { it.copyTo(zip) }
+            zip.closeEntry()
+        }
+    }
+
+    /**
+     * Import skills from a ZIP or single .md file at the given URI.
+     * Detects format by reading first 4 bytes (ZIP magic: PK\x03\x04).
+     * Returns count of imported skills, or -1 on error.
+     */
+    fun importUserSkills(context: Context, uri: Uri): Int {
+        val skillsDir = File(File(context.filesDir, "workspace"), "skills").apply { mkdirs() }
+        val defaultNames = getDefaultSkillNames(context)
+
+        // Read first 4 bytes to detect format
+        val magic = ByteArray(4)
+        val bytesRead = try {
+            context.contentResolver.openInputStream(uri)?.use { it.read(magic) } ?: 0
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to read file for import", e)
+            return -1
+        }
+
+        val isZip = bytesRead >= 4 &&
+            magic[0] == 0x50.toByte() && magic[1] == 0x4B.toByte() &&
+            (
+                (magic[2] == 0x03.toByte() && magic[3] == 0x04.toByte()) || // Local file header
+                (magic[2] == 0x05.toByte() && magic[3] == 0x06.toByte()) || // End of central directory (empty ZIP)
+                (magic[2] == 0x07.toByte() && magic[3] == 0x08.toByte())    // Data descriptor
+            )
+
+        return if (isZip) {
+            importSkillsFromZip(context, uri, skillsDir, defaultNames)
+        } else {
+            importSkillFromMd(context, uri, skillsDir, defaultNames)
+        }
+    }
+
+    private fun importSkillsFromZip(context: Context, uri: Uri, skillsDir: File, defaultNames: Set<String>): Int {
+        val extractedFiles = mutableListOf<File>()
+        val createdDirs = mutableSetOf<File>()
+        val importedDirs = mutableSetOf<String>()
+        val skippedDefaults = mutableSetOf<String>()
+
+        return try {
+            var totalExtracted = 0L
+
+            val inputStream = context.contentResolver.openInputStream(uri)
+            if (inputStream == null) {
+                Log.e(TAG, "Failed to open input stream for skill import")
+                return -1
+            }
+
+            inputStream.use { stream ->
+                ZipInputStream(stream).use { zip ->
+                    var entry = zip.nextEntry
+                    while (entry != null) {
+                        val entryName = entry.name.replace("\\", "/")
+                        val segments = entryName.split("/").filter { it.isNotEmpty() }
+
+                        // Reject path traversal
+                        if (segments.any { it == "." || it == ".." }) {
+                            Log.w(TAG, "Skipping suspicious entry: $entryName")
+                            zip.closeEntry()
+                            entry = zip.nextEntry
+                            continue
+                        }
+
+                        if (segments.isEmpty()) {
+                            zip.closeEntry()
+                            entry = zip.nextEntry
+                            continue
+                        }
+
+                        // Skip entries that would overwrite bundled/default skills
+                        // Check both directory name and root-level .md filename without extension
+                        val skillKey = if (segments.size == 1 && segments[0].endsWith(".md"))
+                            segments[0].removeSuffix(".md") else segments[0]
+                        if (skillKey in defaultNames) {
+                            skippedDefaults.add(skillKey)
+                            zip.closeEntry()
+                            entry = zip.nextEntry
+                            continue
+                        }
+
+                        val destFile = File(skillsDir, segments.joinToString("/"))
+
+                        // Security: ensure destination stays within skills dir
+                        if (!destFile.canonicalPath.startsWith(skillsDir.canonicalPath)) {
+                            Log.w(TAG, "Skipping entry outside skills dir: $entryName")
+                            zip.closeEntry()
+                            entry = zip.nextEntry
+                            continue
+                        }
+
+                        // Track top-level skill name for count (after validation)
+                        importedDirs.add(segments[0])
+
+                        if (entry.isDirectory) {
+                            trackNewDirs(destFile, skillsDir, createdDirs)
+                            destFile.mkdirs()
+                        } else {
+                            destFile.parentFile?.let { parent ->
+                                trackNewDirs(parent, skillsDir, createdDirs)
+                                parent.mkdirs()
+                            }
+                            destFile.outputStream().use { out ->
+                                val buffer = ByteArray(8192)
+                                var read: Int
+                                while (zip.read(buffer).also { read = it } != -1) {
+                                    totalExtracted += read
+                                    if (totalExtracted > IMPORT_MAX_BYTES) {
+                                        destFile.delete()
+                                        throw IllegalStateException("Import exceeds ${IMPORT_MAX_BYTES / 1024 / 1024}MB limit")
+                                    }
+                                    out.write(buffer, 0, read)
+                                }
+                            }
+                            extractedFiles.add(destFile)
+                        }
+
+                        zip.closeEntry()
+                        entry = zip.nextEntry
+                    }
+                }
+            }
+
+            if (skippedDefaults.isNotEmpty()) {
+                Log.w(TAG, "Skipped ${skippedDefaults.size} default skills: $skippedDefaults")
+            }
+            val count = importedDirs.size
+            Log.i(TAG, "Imported $count skills from ZIP (${totalExtracted / 1024}KB)")
+            count
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to import skills from ZIP: ${e.message}", e)
+            for (file in extractedFiles) {
+                try { file.delete() } catch (_: Exception) {}
+            }
+            for (dir in createdDirs.sortedByDescending { it.path.length }) {
+                try { if (dir.exists() && dir.list().isNullOrEmpty()) dir.delete() } catch (_: Exception) {}
+            }
+            -1
+        }
+    }
+
+    private fun importSkillFromMd(context: Context, uri: Uri, skillsDir: File, defaultNames: Set<String>): Int {
+        return try {
+            val inputStream = context.contentResolver.openInputStream(uri)
+            if (inputStream == null) {
+                Log.e(TAG, "Failed to open input stream for .md skill import")
+                return -1
+            }
+
+            val bytes = inputStream.use { it.readBytes() }
+            if (bytes.size > SKILL_IMPORT_MAX_BYTES) {
+                Log.e(TAG, "Skill file exceeds ${SKILL_IMPORT_MAX_BYTES / 1024 / 1024}MB limit (${bytes.size / 1024}KB)")
+                return -1
+            }
+
+            val content = bytes.toString(Charsets.UTF_8)
+            if (content.isBlank()) return -1
+
+            // Try to extract skill name from frontmatter or heading
+            val name = extractSkillNameFromContent(content)
+
+            // Reject imports that would overwrite a bundled/default skill
+            if (name != null && name in defaultNames) {
+                Log.w(TAG, "Skipping import: '$name' is a default skill")
+                return 0
+            }
+
+            if (name != null) {
+                // Create directory-based skill: skills/<name>/SKILL.md
+                val skillDir = File(skillsDir, name).apply { mkdirs() }
+                File(skillDir, "SKILL.md").writeText(content)
+            } else {
+                // Save as flat file: skills/imported_<timestamp>.md
+                val timestamp = System.currentTimeMillis()
+                File(skillsDir, "imported_$timestamp.md").writeText(content)
+            }
+
+            Log.i(TAG, "Imported 1 skill from .md file (name: ${name ?: "unnamed"})")
+            1
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to import skill from .md: ${e.message}", e)
+            -1
+        }
+    }
+
+    private fun extractSkillNameFromContent(content: String): String? {
+        // Try frontmatter name field
+        if (content.startsWith("---")) {
+            val endIdx = content.indexOf("---", 3)
+            if (endIdx > 0) {
+                val fmLines = content.substring(3, endIdx).lines()
+                for (line in fmLines) {
+                    val trimmed = line.trim()
+                    if (trimmed.startsWith("name:")) {
+                        val name = trimmed.substringAfter("name:").trim()
+                            .removeSurrounding("\"").removeSurrounding("'").trim()
+                        if (name.isNotEmpty()) return name.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9_-]"), "-")
+                    }
+                }
+            }
+        }
+        // Try first # heading
+        val headingLine = content.lines().firstOrNull { it.startsWith("# ") }
+        if (headingLine != null) {
+            val name = headingLine.substring(2).trim()
+            if (name.isNotEmpty()) return name.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9_-]"), "-")
+        }
+        return null
+    }
+
+    /** Track all non-existent ancestor directories under [root] for rollback. */
+    private fun trackNewDirs(dir: File, root: File, createdDirs: MutableSet<File>) {
+        var current: File? = dir
+        while (current != null && !current.exists() &&
+            current.canonicalPath.startsWith(root.canonicalPath)
+        ) {
+            createdDirs.add(current)
+            current = current.parentFile
+        }
+    }
+
     /**
      * Delete workspace memory files (MEMORY.md + memory/ directory).
      */
@@ -1000,6 +1351,9 @@ object ConfigManager {
 
     /** Max total uncompressed size to extract from a backup ZIP (50 MB). */
     private const val IMPORT_MAX_BYTES = 50L * 1024 * 1024
+
+    /** Max size for a single .md skill import (5 MB). */
+    private const val SKILL_IMPORT_MAX_BYTES = 5L * 1024 * 1024
 
     /**
      * Allowlist of exact files and directory prefixes for export/import.

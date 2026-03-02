@@ -95,7 +95,9 @@ import com.seekerclaw.app.util.Analytics
 import com.seekerclaw.app.util.LogCollector
 import com.seekerclaw.app.util.LogLevel
 import com.seekerclaw.app.BuildConfig
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
 import java.util.Date
@@ -248,6 +250,47 @@ fun SettingsScreen(
     }
 
     val scope = rememberCoroutineScope()
+
+    val skillsExportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val success = withContext(Dispatchers.IO) { ConfigManager.exportUserSkills(context, uri) }
+                Analytics.featureUsed("skills_bulk_exported")
+                Toast.makeText(
+                    context,
+                    if (success) "Skills exported" else "No added skills to export",
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
+        }
+    }
+
+    val skillsImportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val count = withContext(Dispatchers.IO) { ConfigManager.importUserSkills(context, uri) }
+                Analytics.featureUsed("skills_imported")
+                if (count > 0) {
+                    Toast.makeText(
+                        context,
+                        "Imported $count skill${if (count > 1) "s" else ""}",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                } else {
+                    Toast.makeText(
+                        context,
+                        if (count == 0) "No skills found in file" else "Import failed",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            }
+        }
+    }
+
     val qrConfigLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -870,6 +913,47 @@ fun SettingsScreen(
                 ) {
                     Text(
                         "Import Memory",
+                        fontFamily = RethinkSans,
+                        fontSize = 14.sp,
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedButton(
+                    onClick = {
+                        val timestamp = android.text.format.DateFormat.format("yyyyMMdd", java.util.Date())
+                        skillsExportLauncher.launch("seekerclaw_skills_$timestamp.zip")
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = shape,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, SeekerClawColors.BorderSubtle),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = SeekerClawColors.TextPrimary,
+                    ),
+                ) {
+                    Text(
+                        "Export Skills",
+                        fontFamily = RethinkSans,
+                        fontSize = 14.sp,
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedButton(
+                    onClick = {
+                        skillsImportLauncher.launch(arrayOf("application/zip", "text/markdown", "text/plain"))
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = shape,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, SeekerClawColors.BorderSubtle),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = SeekerClawColors.TextPrimary,
+                    ),
+                ) {
+                    Text(
+                        "Import Skills",
                         fontFamily = RethinkSans,
                         fontSize = 14.sp,
                     )
