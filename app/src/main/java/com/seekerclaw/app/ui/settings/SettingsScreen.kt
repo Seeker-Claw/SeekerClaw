@@ -438,10 +438,10 @@ fun SettingsScreen(
                     .background(SeekerClawColors.Surface, shape),
             ) {
                 ConfigField(
-                    label = "Anthropic",
-                    value = "Model, Keys, Connection Test",
+                    label = "AI Provider",
+                    value = "Anthropic / OpenAI, Model, Keys",
                     onClick = onNavigateToAnthropic,
-                    info = "Configure your Anthropic AI model and credentials.",
+                    info = "Select AI provider (Anthropic or OpenAI), configure model and credentials.",
                 )
                 ConfigField(
                     label = "Telegram",

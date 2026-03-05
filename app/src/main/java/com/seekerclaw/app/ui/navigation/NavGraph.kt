@@ -51,6 +51,7 @@ import kotlinx.serialization.Serializable
 @Serializable object SettingsRoute
 @Serializable object SystemRoute
 @Serializable object AnthropicConfigRoute
+@Serializable object ProviderConfigRoute
 @Serializable object TelegramConfigRoute
 
 data class BottomNavItem(
@@ -215,7 +216,7 @@ fun SeekerClawNavHost() {
                         }
                     },
                     onNavigateToAnthropic = {
-                        navController.navigate(AnthropicConfigRoute)
+                        navController.navigate(ProviderConfigRoute)
                     },
                     onNavigateToTelegram = {
                         navController.navigate(TelegramConfigRoute)
@@ -224,6 +225,11 @@ fun SeekerClawNavHost() {
             }
             composable<AnthropicConfigRoute> {
                 com.seekerclaw.app.ui.settings.AnthropicConfigScreen(
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable<ProviderConfigRoute> {
+                com.seekerclaw.app.ui.settings.ProviderConfigScreen(
                     onBack = { navController.popBackStack() }
                 )
             }
