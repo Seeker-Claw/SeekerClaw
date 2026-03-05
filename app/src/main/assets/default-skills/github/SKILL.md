@@ -7,7 +7,6 @@ metadata:
     emoji: "🐙"
     requires:
       bins: []
-      env: ["GITHUB_TOKEN"]
 ---
 
 # GitHub
