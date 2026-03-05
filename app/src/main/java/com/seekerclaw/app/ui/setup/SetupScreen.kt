@@ -190,7 +190,7 @@ fun SetupScreen(onSetupComplete: () -> Unit) {
         if (isStarting) return
         if (apiKey.isBlank()) {
             apiKeyError = "Required"
-            errorMessage = "Claude API key is required"
+            errorMessage = "Anthropic credential is required"
             currentStep = 1
             return
         }
@@ -212,6 +212,9 @@ fun SetupScreen(onSetupComplete: () -> Unit) {
         isStarting = true
         try {
             val trimmedKey = apiKey.trim()
+            // Setup flow is Anthropic-only — force provider back to the Anthropic provider id ("claude").
+            // OpenAI is configured separately in Settings > Provider.
+            val existing = ConfigManager.loadConfig(context)
             val config = AppConfig(
                 anthropicApiKey = if (authType == "api_key") trimmedKey else "",
                 setupToken = if (authType == "setup_token") trimmedKey else "",
@@ -305,7 +308,7 @@ fun SetupScreen(onSetupComplete: () -> Unit) {
             // Step indicator
             SetupStepIndicator(
                 currentStep = currentStep,
-                labels = listOf("Welcome", "Claude", "Telegram", "Options"),
+                labels = listOf("Welcome", "Anthropic", "Telegram", "Options"),
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -336,7 +339,7 @@ fun SetupScreen(onSetupComplete: () -> Unit) {
                 isQrImporting = isQrImporting,
                 qrError = qrError,
             )
-            1 -> ClaudeApiStep(
+            1 -> AnthropicApiStep(
                 apiKey = apiKey,
                 onApiKeyChange = { newValue ->
                     apiKey = newValue
@@ -462,7 +465,7 @@ private fun WelcomeStep(
         SetupCard {
             RequirementRow(
                 icon = Icons.Default.Key,
-                title = "Claude API Key",
+                title = "Anthropic API Key",
                 subtitle = "From console.anthropic.com, or a Pro/Max token",
             )
             HorizontalDivider(
@@ -580,7 +583,7 @@ private fun WelcomeStep(
 }
 
 @Composable
-private fun ClaudeApiStep(
+private fun AnthropicApiStep(
     apiKey: String,
     onApiKeyChange: (String) -> Unit,
     authType: String,
@@ -902,7 +905,7 @@ private fun OptionsStep(
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Choose the Claude model that powers your agent.",
+                text = "Choose the model that powers your agent.",
                 fontSize = 12.sp,
                 color = SeekerClawColors.TextDim,
             )

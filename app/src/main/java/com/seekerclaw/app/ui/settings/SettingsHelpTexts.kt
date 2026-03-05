@@ -9,6 +9,18 @@ object SettingsHelpTexts {
 
     // ── Configuration ──────────────────────────────────────────────
 
+    const val PROVIDER =
+        "Which AI provider powers your agent.\n\n" +
+        "\u2022 Anthropic — Claude models (default). Supports API keys & setup tokens.\n" +
+        "\u2022 OpenAI — GPT & Codex models. API key only.\n\n" +
+        "Both keys are saved — switch freely without losing credentials."
+
+    const val OPENAI_API_KEY =
+        "Your OpenAI API key. " +
+        "Get one at platform.openai.com \u2192 API Keys \u2192 Create Key. " +
+        "Starts with \"sk-proj-\" or \"sk-\". " +
+        "Required when OpenAI is the active provider."
+
     const val AUTH_TYPE =
         "How your agent talks to the AI. " +
         "API Key = your own Anthropic key (you're the boss). " +
@@ -40,12 +52,10 @@ object SettingsHelpTexts {
         "Find yours: message @userinfobot on Telegram."
 
     const val MODEL =
-        "Your agent's brain.\n\n" +
-        "\u2022 Opus 4.6 — big brain, big bill.\n" +
-        "\u2022 Sonnet 4.6 — sweet spot.\n" +
-        "\u2022 Sonnet 4.5 — last gen, still solid.\n" +
-        "\u2022 Haiku 4.5 — fast & cheap.\n\n" +
-        "Pick your fighter \uD83E\uDDE0"
+        "Your agent's brain. Models depend on your provider.\n\n" +
+        "Anthropic examples: Opus 4.6 (powerful), Sonnet 4.6 (balanced), Haiku 4.5 (fast).\n" +
+        "OpenAI examples: GPT-5.2 (flagship), GPT-5.3 Codex (code agent).\n\n" +
+        "Exact options may change over time \u2014 pick your fighter \uD83E\uDDE0"
 
     const val AGENT_NAME =
         "What should we call your agent? " +

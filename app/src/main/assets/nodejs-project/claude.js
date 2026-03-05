@@ -99,16 +99,16 @@ async function visionAnalyzeImage(imageBase64, prompt, maxTokens = 400) {
 }
 
 // ============================================================================
-// CLAUDE USAGE STATE
+// API USAGE STATE
 // ============================================================================
 
-const CLAUDE_USAGE_FILE = path.join(workDir, 'claude_usage_state');
+const API_USAGE_FILE = path.join(workDir, 'api_usage_state');
 
-function writeClaudeUsageState(data) {
+function writeApiUsageState(data) {
     try {
-        fs.writeFileSync(CLAUDE_USAGE_FILE, JSON.stringify(data));
+        fs.writeFileSync(API_USAGE_FILE, JSON.stringify(data));
     } catch (e) {
-        log(`Failed to write claude usage state: ${e.message}`, 'WARN');
+        log(`Failed to write API usage state: ${e.message}`, 'WARN');
     }
 }
 
@@ -153,6 +153,7 @@ function updateAgentHealth(newStatus, errorInfo) {
         agentHealth.lastError?.type !== errorInfo.type ||
         agentHealth.lastError?.status !== errorInfo.status
     );
+    const wasUnhealthy = agentHealth.apiStatus === 'error' || agentHealth.apiStatus === 'degraded';
     agentHealth.apiStatus = newStatus;
     if (errorInfo) {
         agentHealth.lastError = errorInfo;
@@ -160,6 +161,10 @@ function updateAgentHealth(newStatus, errorInfo) {
         agentHealth.consecutiveFailures++;
     }
     if (newStatus === 'healthy') {
+        if (wasUnhealthy) {
+            log(`[Health] API recovered after ${agentHealth.consecutiveFailures} failure(s)`, 'INFO');
+        }
+        agentHealth.lastError = null;
         agentHealth.lastSuccessAt = localTimestamp();
         agentHealth.consecutiveFailures = 0;
     }
@@ -1222,11 +1227,10 @@ async function claudeApiCall(body, chatId, traceCtx = {}) {
 
         // Capture rate limit headers and update module-level tracking
         if (res.headers) {
-            const h = res.headers;
-            const parsedRemaining = parseInt(h['anthropic-ratelimit-tokens-remaining'], 10);
-            lastRateLimitTokensRemaining = Number.isFinite(parsedRemaining) ? parsedRemaining : Infinity;
-            lastRateLimitTokensReset = h['anthropic-ratelimit-tokens-reset'] || '';
-            writeClaudeUsageState({
+            const rl = adapter.parseRateLimitHeaders(res.headers);
+            lastRateLimitTokensRemaining = rl.tokensRemaining;
+            lastRateLimitTokensReset = rl.tokensReset;
+            writeApiUsageState({
                 type: 'api_key',
                 auth_mode: AUTH_TYPE,
                 requests: {
@@ -1835,7 +1839,7 @@ module.exports = {
     sessionTracking, saveSessionSummary,
     MIN_MESSAGES_FOR_SUMMARY, IDLE_TIMEOUT_MS,
     // Health
-    writeAgentHealthFile, writeClaudeUsageState,
+    writeAgentHealthFile, writeApiUsageState,
     // Session expiry
     isSessionExpired: () => _sessionExpired,
     resetSessionExpiry: () => {

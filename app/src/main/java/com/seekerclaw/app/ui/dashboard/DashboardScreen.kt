@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.seekerclaw.app.config.ConfigManager
 import com.seekerclaw.app.config.modelDisplayName
+import com.seekerclaw.app.config.providerById
 import com.seekerclaw.app.service.OpenClawService
 import com.seekerclaw.app.ui.theme.SeekerClawColors
 import com.seekerclaw.app.util.Analytics
@@ -180,6 +181,28 @@ fun DashboardScreen(onNavigateToSystem: () -> Unit = {}, onNavigateToSettings: (
     val apiUnhealthy = status == ServiceStatus.RUNNING &&
         health.apiStatus != "healthy" && health.apiStatus != "unknown"
 
+    // Recovery banner: show briefly when transitioning from unhealthy → healthy
+    var showRecoveryBanner by remember { mutableStateOf(false) }
+    var prevStatus by remember { mutableStateOf<ServiceStatus?>(null) }
+    var prevApiStatus by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(status, health.apiStatus) {
+        val prevRunning = prevStatus == ServiceStatus.RUNNING
+        val wasUnhealthy = prevRunning && prevApiStatus in listOf("error", "degraded", "stale")
+        val isRunning = status == ServiceStatus.RUNNING
+        val isHealthy = isRunning && health.apiStatus == "healthy"
+        val isUnhealthyNow = isRunning && health.apiStatus in listOf("error", "degraded", "stale")
+
+        if (wasUnhealthy && isHealthy) {
+            showRecoveryBanner = true
+            delay(5000)
+            showRecoveryBanner = false
+        }
+        if (isUnhealthyNow) showRecoveryBanner = false
+
+        prevStatus = status
+        prevApiStatus = health.apiStatus
+    }
+
     // Reset dismiss states via side effects (not during composition)
     LaunchedEffect(isOnline) { if (isOnline) networkBannerDismissed = false }
     LaunchedEffect(apiUnhealthy) { if (!apiUnhealthy) errorBannerDismissedKey = null }
@@ -301,14 +324,15 @@ fun DashboardScreen(onNavigateToSystem: () -> Unit = {}, onNavigateToSettings: (
         if (apiUnhealthy && !errorDismissed) {
             val bannerColor = if (health.apiStatus == "error") SeekerClawColors.Error
                 else SeekerClawColors.Warning
+            val providerName = providerById(config?.provider ?: "claude").displayName
             val bannerText = when (health.lastErrorType) {
                 "auth" -> "API key rejected${health.lastErrorStatus?.let { " ($it)" } ?: ""} \u2014 check Settings"
-                "billing" -> "API billing issue \u2014 check console.anthropic.com"
+                "billing" -> "API billing issue \u2014 check ${providerById(config?.provider ?: "claude").consoleUrl}"
                 "quota" -> "API quota exceeded \u2014 try again later or upgrade plan"
                 "rate_limit" -> "Rate limited \u2014 retrying automatically"
-                "server", "overloaded" -> "Claude API temporarily unavailable \u2014 retrying"
-                "cloudflare" -> "Claude API unreachable \u2014 retrying"
-                "network" -> "Cannot reach Claude API \u2014 check internet connection"
+                "server", "overloaded" -> "$providerName API temporarily unavailable \u2014 retrying"
+                "cloudflare" -> "$providerName API unreachable \u2014 retrying"
+                "network" -> "Cannot reach $providerName API \u2014 check internet connection"
                 else -> if (health.apiStatus == "stale") "Agent may have stopped responding \u2014 try restarting"
                     else "API error \u2014 check Console for details"
             }
@@ -343,6 +367,33 @@ fun DashboardScreen(onNavigateToSystem: () -> Unit = {}, onNavigateToSettings: (
                         modifier = Modifier.size(16.dp),
                     )
                 }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // Recovery banner — brief green confirmation after API recovers
+        if (showRecoveryBanner && status == ServiceStatus.RUNNING) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(SeekerClawColors.Accent.copy(alpha = 0.12f), shape)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(SeekerClawColors.Accent),
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "API connection restored",
+                    fontFamily = RethinkSans,
+                    fontSize = 13.sp,
+                    color = SeekerClawColors.Accent,
+                    modifier = Modifier.weight(1f),
+                )
             }
             Spacer(modifier = Modifier.height(16.dp))
         }

@@ -38,7 +38,7 @@ data class AppConfig(
     val autoStartOnBoot: Boolean = true,
     val heartbeatIntervalMinutes: Int = 30,
 ) {
-    /** Returns the credential that should be used based on the current authType. */
+    /** Anthropic/authType-based credential — used by SetupScreen and legacy flows. */
     val activeCredential: String
         get() = if (authType == "setup_token") setupToken else anthropicApiKey
 }
@@ -525,7 +525,7 @@ object ConfigManager {
         val config = loadConfig(context)
         val agentName = config?.agentName ?: "Unknown"
         val authType = config?.authType ?: "api_key"
-        val authLabel = if (authType == "setup_token") "Claude Pro/Max (setup token)" else "API key"
+        val authLabel = if (authType == "setup_token") "Pro/Max (setup token)" else "API key"
         val aiModel = config?.model ?: "claude-opus-4-6"
 
         // Timestamp
