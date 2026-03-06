@@ -1,6 +1,7 @@
 import java.net.HttpURLConnection
 import java.net.URI
 import java.util.Properties
+import java.security.MessageDigest
 import java.util.zip.ZipInputStream
 
 plugins {
@@ -164,7 +165,7 @@ abstract class DownloadNodejsTask : DefaultTask() {
         }
 
         // H-05: Always verify SHA-256 — catches tampered cached files too (#204)
-        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        val digest = MessageDigest.getInstance("SHA-256")
         val actualSha256 = zipFile.inputStream().use { input ->
             val buf = ByteArray(8192)
             var n: Int
