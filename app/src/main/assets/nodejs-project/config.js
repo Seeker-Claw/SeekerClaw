@@ -256,6 +256,8 @@ const SHELL_ALLOWLIST = new Set([
 const CONFIRM_REQUIRED = new Set([
     'android_sms',
     'android_call',
+    'android_camera_capture', // #207: silent photo risk from prompt injection
+    'android_location',       // #207: silent location tracking risk
     'solana_send',           // BAT-255: P0 — wallet-draining risk from prompt injection
     'solana_swap',           // BAT-255: P0 — wallet-draining risk from prompt injection
     'jupiter_trigger_create',
@@ -266,6 +268,8 @@ const CONFIRM_REQUIRED = new Set([
 const TOOL_RATE_LIMITS = {
     'android_sms': 60000,       // 1 per 60s
     'android_call': 60000,      // 1 per 60s
+    'android_camera_capture': 15000, // 1 per 15s (#207)
+    'android_location': 15000,       // 1 per 15s (#207)
     'solana_send': 15000,       // 1 per 15s (BAT-255)
     'solana_swap': 15000,       // 1 per 15s (BAT-255)
     'jupiter_trigger_create': 30000,  // 1 per 30s
