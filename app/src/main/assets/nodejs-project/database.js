@@ -119,6 +119,20 @@ async function initDatabase() {
             value TEXT
         )`);
 
+        // Session tracking for temporal context awareness (BAT-322)
+        db.run(`CREATE TABLE IF NOT EXISTS sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            started_at TEXT NOT NULL,
+            ended_at TEXT NOT NULL,
+            duration_min INTEGER NOT NULL,
+            message_count INTEGER NOT NULL,
+            summary_file TEXT,
+            summary_excerpt TEXT,
+            trigger TEXT,
+            model TEXT
+        )`);
+        db.run(`CREATE INDEX IF NOT EXISTS idx_sessions_ended ON sessions(ended_at)`);
+
         // Persist immediately so the file exists on disk right away
         saveDatabase();
 
@@ -280,6 +294,152 @@ function chunkMarkdown(content) {
     }
 
     return result;
+}
+
+// ============================================================================
+// SESSION TRACKING — Temporal Context Awareness (BAT-322)
+// ============================================================================
+
+/**
+ * Save a session record after a summary is generated.
+ * @param {object} opts - { startedAt, endedAt, durationMin, messageCount, summaryFile, summaryExcerpt, trigger, model }
+ */
+function saveSession({ startedAt, endedAt, durationMin, messageCount, summaryFile, summaryExcerpt, trigger, model }) {
+    if (!db) return;
+    try {
+        db.run(
+            `INSERT INTO sessions (started_at, ended_at, duration_min, message_count, summary_file, summary_excerpt, trigger, model)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [startedAt, endedAt, durationMin, messageCount, summaryFile ?? null, summaryExcerpt ?? null, trigger ?? null, model ?? null]
+        );
+        saveDatabase();
+    } catch (err) {
+        log(`[Sessions] Save error (non-fatal): ${err.message}`, 'WARN');
+    }
+}
+
+/**
+ * Format a relative time label from a timestamp.
+ * @param {string} isoTimestamp - ISO 8601 timestamp
+ * @returns {string} e.g. "12 minutes ago", "3 hours ago", "yesterday at 2:30 PM", "3 days ago"
+ */
+function relativeTimeLabel(isoTimestamp) {
+    const ts = new Date(isoTimestamp).getTime();
+    if (!Number.isFinite(ts)) return 'unknown time';
+    const diffMs = Date.now() - ts;
+    if (diffMs < 0) return 'just now'; // future timestamp (clock skew) — clamp
+    const diffMin = Math.floor(diffMs / 60000);
+    const diffHr = Math.floor(diffMs / 3600000);
+    const diffDay = Math.floor(diffMs / 86400000);
+
+    if (diffMin < 1) return 'just now';
+    if (diffMin < 60) return `${diffMin} minute${diffMin === 1 ? '' : 's'} ago`;
+    if (diffHr < 24) return `${diffHr} hour${diffHr === 1 ? '' : 's'} ago`;
+    if (diffDay === 1) {
+        // "yesterday at 2:30 PM"
+        const d = new Date(isoTimestamp);
+        return `yesterday at ${d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+    }
+    if (diffDay < 7) return `${diffDay} days ago`;
+    if (diffDay < 30) return `${Math.floor(diffDay / 7)} week${Math.floor(diffDay / 7) === 1 ? '' : 's'} ago`;
+    return `${Math.floor(diffDay / 30)} month${Math.floor(diffDay / 30) === 1 ? '' : 's'} ago`;
+}
+
+/**
+ * Get recent sessions for system prompt injection.
+ * @param {number} limit - Max sessions to return (default 5)
+ * @returns {Array<{startedAt, endedAt, durationMin, messageCount, summaryFile, trigger, model, relativeTime, summaryText}>}
+ */
+function getRecentSessions(limit = 5) {
+    if (!db) return [];
+    try {
+        const rows = db.exec(
+            `SELECT started_at, ended_at, duration_min, message_count, summary_file, summary_excerpt, trigger, model
+             FROM sessions ORDER BY ended_at DESC LIMIT ?`,
+            [limit]
+        );
+        if (!rows.length || !rows[0].values.length) return [];
+
+        return rows[0].values.map(([startedAt, endedAt, durationMin, messageCount, summaryFile, summaryExcerpt, trigger, model]) => ({
+            startedAt,
+            endedAt,
+            durationMin: durationMin ?? 0,
+            messageCount: messageCount ?? 0,
+            summaryFile: summaryFile ?? null,
+            trigger: trigger ?? null,
+            model: model ?? null,
+            relativeTime: relativeTimeLabel(endedAt),
+            summaryText: summaryExcerpt ?? null,
+        }));
+    } catch (err) {
+        log(`[Sessions] Query error (non-fatal): ${err.message}`, 'WARN');
+        return [];
+    }
+}
+
+/**
+ * Backfill sessions table from existing summary files in memory/.
+ * Runs once on upgrade — skips if sessions table already has data.
+ * Parses timestamps and metadata from summary file headers.
+ */
+function backfillSessionsFromFiles() {
+    if (!db) return;
+    try {
+        // Skip if sessions table already has data
+        const existing = db.exec('SELECT COUNT(*) FROM sessions');
+        if (existing.length > 0 && existing[0].values[0][0] > 0) return;
+
+        if (!fs.existsSync(MEMORY_DIR)) return;
+
+        const summaryFiles = fs.readdirSync(MEMORY_DIR)
+            .filter(f => /^\d{4}-\d{2}-\d{2}-.+\.md$/.test(f))
+            .sort();
+
+        let backfilled = 0;
+        for (const file of summaryFiles) {
+            try {
+                const content = fs.readFileSync(path.join(MEMORY_DIR, file), 'utf8');
+
+                // Parse header: "# Session Summary — 2026-03-07T14:32:45+00:00"
+                const headerMatch = content.match(/^# Session Summary\s*[—–-]\s*(.+)$/m);
+                if (!headerMatch) continue;
+                const parsedDate = new Date(headerMatch[1].trim());
+                if (!Number.isFinite(parsedDate.getTime())) continue;
+                const endedAt = parsedDate.toISOString();
+
+                // Parse meta: "> Trigger: idle | Exchanges: 12 | Model: claude-sonnet-4-6"
+                const metaMatch = content.match(/^>\s*Trigger:\s*(\w+)\s*\|\s*Exchanges:\s*(\d+)\s*\|\s*Model:\s*(.+)$/m);
+                const trigger = metaMatch ? metaMatch[1] : 'unknown';
+                const messageCount = metaMatch ? parseInt(metaMatch[2]) || 0 : 0;
+                const model = metaMatch ? metaMatch[3].trim() : null;
+
+                // Extract bullet points for summary_excerpt
+                const bullets = content.split('\n')
+                    .filter(l => l.startsWith('- '))
+                    .slice(0, 3)
+                    .map(l => l.slice(2).trim())
+                    .join('. ') || null;
+
+                // Estimate duration from message count (rough: ~3min per exchange)
+                const durationMin = Math.max(1, messageCount * 3);
+                const startedAt = new Date(parsedDate.getTime() - durationMin * 60000).toISOString();
+
+                db.run(
+                    `INSERT INTO sessions (started_at, ended_at, duration_min, message_count, summary_file, summary_excerpt, trigger, model)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [startedAt, endedAt, durationMin, messageCount, file, bullets, trigger, model]
+                );
+                backfilled++;
+            } catch (_) { /* skip malformed files */ }
+        }
+
+        if (backfilled > 0) {
+            saveDatabase();
+            log(`[Sessions] Backfilled ${backfilled} sessions from existing summary files`, 'INFO');
+        }
+    } catch (err) {
+        log(`[Sessions] Backfill error (non-fatal): ${err.message}`, 'WARN');
+    }
 }
 
 // ============================================================================
@@ -450,6 +610,9 @@ module.exports = {
     setShutdownDeps,
     initDatabase,
     indexMemoryFiles,
+    saveSession,
+    getRecentSessions,
+    backfillSessionsFromFiles,
     writeDbSummaryFile,
     markDbSummaryDirty,
     startDbSummaryInterval,
