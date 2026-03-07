@@ -166,6 +166,7 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: SeekerClaw ${{ steps.version.outputs.tag }}
           body: ${{ steps.changelog.outputs.notes }}
+          prerelease: ${{ contains(github.ref_name, '-rc') }}
           files: artifacts/*
 
       - name: Create GitHub Release (auto-generated notes)
@@ -175,4 +176,5 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: SeekerClaw ${{ steps.version.outputs.tag }}
           generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-rc') }}
           files: artifacts/*

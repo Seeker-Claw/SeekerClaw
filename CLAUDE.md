@@ -40,7 +40,7 @@
 
 | Version | Current | Location |
 |---------|---------|----------|
-| **App** | `1.5.3` (code 10) | `app/build.gradle.kts` → `versionName` / `versionCode` |
+| **App** | `1.5.4` (code 11) | `app/build.gradle.kts` → `versionName` / `versionCode` |
 | **OpenClaw** | `2026.3.1` | `app/build.gradle.kts` → `OPENCLAW_VERSION` buildConfigField |
 | **Node.js** | `18 LTS` | `app/build.gradle.kts` → `NODEJS_VERSION` buildConfigField |
 
@@ -460,6 +460,12 @@ git tag -d v1.x.x && git push origin :refs/tags/v1.x.x
 git tag v1.x.x && git push origin v1.x.x
 ```
 
+**Release Candidate (RC) flow:** Before submitting to dApp Store, always test the signed APK:
+1. Tag `v1.x.x-rc1` → triggers release workflow → creates **pre-release** on GitHub
+2. Download APK from GitHub Releases, install on Seeker, verify it launches and works
+3. If good → tag `v1.x.x` (final release), submit to dApp Store
+4. If bad → fix, tag `v1.x.x-rc2`, repeat
+
 ## Reference Documents
 
 - `docs/internal/RESEARCH.md` — Deep feasibility research on Node.js on Android, background services, Solana Mobile, competitive landscape
@@ -701,6 +707,10 @@ SeekerClaw uses a single **DarkOps** theme (dark navy + crimson red + green stat
 ## Coding Patterns & Pitfalls
 
 Hard-won lessons from code review. Follow these patterns to avoid recurring bugs.
+
+### ProGuard / R8 and @Serializable
+
+All `@Serializable` classes in `com.seekerclaw.app.**` are protected by wildcard rules in `proguard-rules.pro`. Adding new `@Serializable` objects (routes, data classes) requires no extra steps. If you move serializable classes outside this package, add a matching keep rule.
 
 ### Timer Cleanup
 
