@@ -475,6 +475,73 @@ function recordSentMessage(chatId, messageId, text) {
     });
 }
 
+const CHUNK_MAX = 3500; // Conservative margin — HTML tags (<b>, <pre>, <code>) expand text beyond raw markdown length
+
+/**
+ * Split text into Telegram-safe chunks, preferring markdown-friendly break points.
+ * Handles paragraph breaks, line breaks, word boundaries, and code fence continuity.
+ */
+function chunkMarkdown(text) {
+    if (text.length <= CHUNK_MAX) return [text];
+
+    const chunks = [];
+    let remaining = text;
+
+    while (remaining.length > CHUNK_MAX) {
+        let breakAt = -1;
+
+        // 1. Prefer paragraph boundary (double newline)
+        const paraIdx = remaining.lastIndexOf('\n\n', CHUNK_MAX - 2);
+        if (paraIdx > CHUNK_MAX * 0.3) {
+            breakAt = paraIdx + 2; // always <= CHUNK_MAX
+        }
+
+        // 2. Fallback: single newline
+        if (breakAt === -1) {
+            const lineIdx = remaining.lastIndexOf('\n', CHUNK_MAX - 1);
+            if (lineIdx > CHUNK_MAX * 0.3) {
+                breakAt = lineIdx + 1; // always <= CHUNK_MAX
+            }
+        }
+
+        // 3. Fallback: last whitespace (word boundary)
+        if (breakAt === -1) {
+            const wsIdx = remaining.lastIndexOf(' ', CHUNK_MAX - 1);
+            if (wsIdx > CHUNK_MAX * 0.3) {
+                breakAt = wsIdx + 1; // always <= CHUNK_MAX
+            }
+        }
+
+        // 4. Hard fallback: slice at limit
+        if (breakAt === -1) {
+            breakAt = CHUNK_MAX;
+        }
+
+        let chunk = remaining.slice(0, breakAt);
+        remaining = remaining.slice(breakAt);
+
+        // Handle unclosed code fences: odd count of ``` means one is open
+        const fences = chunk.match(/^ {0,3}```/gm);
+        if (fences && fences.length % 2 !== 0) {
+            // Don't add artificial fences if remaining already starts with the closing fence
+            if (/^ {0,3}```/.test(remaining)) {
+                // The natural closing fence is at the start of remaining — leave it alone
+            } else {
+                chunk += '\n```';
+                remaining = '```\n' + remaining;
+            }
+        }
+
+        chunks.push(chunk);
+    }
+
+    if (remaining.length > 0) {
+        chunks.push(remaining);
+    }
+
+    return chunks;
+}
+
 async function sendMessage(chatId, text, replyTo = null, buttons = null) {
     // Clean AI artifacts before sending to user
     text = cleanResponse(text);
@@ -482,13 +549,8 @@ async function sendMessage(chatId, text, replyTo = null, buttons = null) {
     // Redact any leaked secrets (API keys, tokens) from outgoing messages
     text = redactSecrets(text);
 
-    // Telegram max message length is 4096
-    const chunks = [];
-    let remaining = text;
-    while (remaining.length > 0) {
-        chunks.push(remaining.slice(0, 4000));
-        remaining = remaining.slice(4000);
-    }
+    // Telegram max message length is 4096 — use markdown-aware chunking
+    const chunks = chunkMarkdown(text);
 
     for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i];
@@ -498,10 +560,11 @@ async function sendMessage(chatId, text, replyTo = null, buttons = null) {
         let sent = false;
 
         // Try with HTML first (supports native blockquotes)
+        const htmlText = toTelegramHtml(chunk);
         try {
             const payload = {
                 chat_id: chatId,
-                text: toTelegramHtml(chunk),
+                text: htmlText,
                 reply_to_message_id: replyTo,
                 parse_mode: 'HTML',
             };
@@ -514,7 +577,18 @@ async function sendMessage(chatId, text, replyTo = null, buttons = null) {
                     recordSentMessage(chatId, result.result.message_id, chunk);
                 }
             } else if (result && !result.ok) {
-                log(`HTML format rejected: ${result.description || 'unknown'}`, 'WARN');
+                const desc = result.description || '';
+                // HTML expansion exceeded Telegram's 4096 limit — re-chunk at half size
+                if (desc.includes('too long')) {
+                    const half = Math.floor(chunk.length / 2);
+                    const subChunks = chunkMarkdown(chunk.slice(0, half));
+                    subChunks.push(...chunkMarkdown(chunk.slice(half)));
+                    // Insert sub-chunks after current position so they get sent in order
+                    chunks.splice(i + 1, 0, ...subChunks);
+                    sent = true; // skip plain-text fallback, sub-chunks will be sent next
+                } else {
+                    log(`HTML format rejected: ${desc}`, 'WARN');
+                }
             }
         } catch (e) {
             log(`sendMessage HTML failed: ${e.message}`, 'WARN');
