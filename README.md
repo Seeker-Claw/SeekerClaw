@@ -93,6 +93,18 @@ Open the app → pick your AI provider (Claude or OpenAI) → enter your API key
 
 > **Beta** — SeekerClaw is under active development. Expect rough edges and breaking changes. Issues and PRs welcome.
 
+## Partner Skills
+
+Install via Telegram: send your agent the install link and it handles the rest.
+
+| | Skill | What it does | Install |
+|---|---|---|---|
+| :paw_prints: | **ClawPump** | Launch tokens on Solana via pump.fun — gasless launches | [Install](https://seekerclaw.xyz/partner-skills/clawpump.md) |
+| :crystal_ball: | **Dune Analytics** | Query onchain data — DEX trades, token stats, wallet activity | [Install](https://seekerclaw.xyz/partner-skills/dune-analytics.md) |
+| :house: | **Home Assistant** | Control smart home — lights, climate, vacuum, alarm, media | [Install](https://seekerclaw.xyz/partner-skills/home-assistant.md) |
+
+> **Build your own:** Skills are Markdown files with YAML frontmatter. See [SKILL-FORMAT.md](SKILL-FORMAT.md) for the spec.
+
 ## Important Safety Notice
 
 SeekerClaw gives an AI agent real capabilities on your phone — including wallet transactions, messaging, and device control. Please be aware:
