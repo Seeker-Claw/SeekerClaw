@@ -91,6 +91,8 @@ adb install app/build/outputs/apk/dappStore/debug/app-dappStore-debug.apk
 
 Open the app → pick your AI provider (Claude or OpenAI) → enter your API key + [Telegram bot token](https://t.me/BotFather) + choose a model + name your agent — or generate a QR code at [seekerclaw.xyz/setup](https://seekerclaw.xyz/setup) and scan it. Done.
 
+> **Step-by-step setup guide:** [How to set up SeekerClaw](https://x.com/SeekerClaw/status/2029197829068005849)
+
 > **Beta** — SeekerClaw is under active development. Expect rough edges and breaking changes. Issues and PRs welcome.
 
 ## Partner Skills
