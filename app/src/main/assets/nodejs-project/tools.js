@@ -807,14 +807,15 @@ const TOOLS = [
                 text: { type: 'string', description: 'Message text to send (Markdown formatting supported; converted to Telegram HTML). Max 4096 characters — for long responses use the default sendMessage().' },
                 buttons: {
                     type: 'array',
-                    description: 'Optional inline keyboard rows. Each row is an array of button objects with "text" (display label) and "callback_data" (value sent back when tapped, max 64 bytes). Example: [[{"text": "✅ Yes", "callback_data": "yes"}, {"text": "❌ No", "callback_data": "no"}]]',
+                    description: 'Optional inline keyboard rows. Each row is an array of button objects with "text" (display label), "callback_data" (value sent back when tapped, max 64 bytes), and optional "style" ("destructive" for red, "primary" for blue). Example: [[{"text": "✅ Confirm", "callback_data": "yes", "style": "primary"}, {"text": "❌ Cancel", "callback_data": "no"}]]',
                     items: {
                         type: 'array',
                         items: {
                             type: 'object',
                             properties: {
                                 text: { type: 'string' },
-                                callback_data: { type: 'string' }
+                                callback_data: { type: 'string' },
+                                style: { type: 'string', enum: ['destructive', 'primary'], description: 'Button color: "destructive" (red) or "primary" (blue). Omit for default gray.' }
                             },
                             required: ['text', 'callback_data']
                         }
@@ -3424,6 +3425,9 @@ async function executeTool(name, input, chatId) {
                     for (const btn of row) {
                         if (!btn.text || !btn.callback_data) return { error: 'Each button must have "text" and "callback_data"' };
                         if (Buffer.byteLength(btn.callback_data, 'utf8') > 64) return { error: `callback_data "${btn.callback_data.slice(0, 20)}..." exceeds Telegram 64-byte limit` };
+                        if (btn.style && btn.style !== 'destructive' && btn.style !== 'primary') {
+                            delete btn.style; // Strip invalid style rather than failing
+                        }
                     }
                 }
             }
