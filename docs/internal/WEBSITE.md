@@ -1,6 +1,6 @@
 # WEBSITE.md — Website Content
 
-> Last updated: 2026-03-16 | Last deployed: _never_
+> Last updated: 2026-03-19 | Last deployed: _never_
 >
 > **Rule:** Every item must earn its screen space. Less is more.
 > Before deploying, review the Editorial Notes in each section.
@@ -38,7 +38,7 @@
 |-------|-------|---------------|
 | 150,000+ | Seeker Devices | Social proof — large addressable market |
 | 56+ | Built-in Tools | Shows depth — but consider "50+" for cleaner number |
-| 259+ | PRs Shipped | Shows velocity — but do users care about PRs? |
+| 267+ | PRs Shipped | Shows velocity — but do users care about PRs? |
 | 24/7 | Autonomous Agent | Key differentiator — always on |
 
 <!-- REVIEW: Is "PRs Shipped" the right 3rd stat? Alternatives:
@@ -71,7 +71,7 @@ Check SOL & SPL token balances, send transactions, swap tokens via Jupiter,
 create limit orders and DCA positions — all secured by Seed Vault hardware.
 
 ### 2. Autonomous AI Agent (icon: brain)
-Powered by Claude or OpenAI (multi-provider) with persistent memory,
+Powered by Claude, OpenAI, or OpenRouter (100+ models) with persistent memory,
 session continuity, customizable personality, and scheduled AI turns running 24/7.
 Self-aware — knows its own capabilities, diagnoses its own issues,
 and tells you what went wrong instead of failing silently.
@@ -194,8 +194,8 @@ reminders, research, and more. Export, import, and share skills as files.
 - NFT holdings viewer (Helius DAS API — regular + compressed NFTs)
 - Cron agent turns — scheduled jobs run full AI conversations
 - Session memory — agent remembers context across restarts
-- Multi-provider support (Claude + OpenAI)
-- OpenClaw v2026.3.8 parity
+- Multi-provider support (Claude + OpenAI + OpenRouter — 100+ models)
+- OpenClaw v2026.3.13 parity
 - Open-source: MIT license, CI/CD, community contribution ready
 - Self-aware agent: 100% SAB score (36/36 audit points)
 

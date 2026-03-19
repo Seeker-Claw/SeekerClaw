@@ -53,6 +53,7 @@ SeekerClaw is an Android app built for the Solana Seeker phone (also works on an
 - **SILENT_REPLY protocol** — Agent silently drops messages when it has nothing useful to say
 - **Ephemeral session awareness** — Agent knows context resets on restart
 - **PLATFORM.md auto-generation** — Device state (model, RAM, storage, battery, permissions, wallet) written on every service start
+- **Setup token billing attribution** — Anthropic setup tokens (sk-ant-oat01-*) now work with Sonnet/Opus via CC_BILLING_HEADER in system prompt (BAT-460)
 - **Self-awareness system prompt** — Self-knowledge doors, architecture blocks, self-diagnosis playbook for troubleshooting tool failures and silent responses. Debug log rotation at 5MB with `.old` archive. DIAGNOSTICS.md deep troubleshooting guide. SAB-AUDIT-v13: 100% score (141/141 audit points)
 - **Structured log levels** — DEBUG/INFO/WARN/ERROR pipeline with per-level routing; UI log viewer color-coded by level; LogCollector filters noise from debug output
 - **Skill routing** — Routing blocks prevent conflicting skills from firing together; reply tag first-token rule for reliable `[[reply_to_current]]` detection
@@ -165,7 +166,7 @@ SeekerClaw is an Android app built for the Solana Seeker phone (also works on an
 - **Logs viewer** — Color-coded, auto-scrolling monospace, stable keys for performance
 - **Settings** — Collapsible sections with animation, grouped Anthropic & Telegram settings, edit config with masked fields, required field indicators (*), model dropdown, auto-start, battery optimization, export/import (allowlist-based, size-capped, auto-backup before import), wallet copy button, MCP server management (add/edit/remove/toggle), visual escalation for danger zone, semantic action colors (green positive, red danger), accessibility content descriptions on all icons, permission revoke dialog on granted toggles
 - **Skills tab** — Installed skills list with search, skill detail view with export button, marketplace teaser, skill images (Coil), "Added"/"Default" grouping, bulk export/import (ZIP + .md)
-- **System screen** — API usage stats, memory index status, colored accent borders on stat cards
+- **System screen** — API usage stats, memory index status, Material Design polish with M3 spacing tokens
 - **Foreground service** — START_STICKY with wake lock, boot receiver, watchdog (30s health check), heartbeat end-to-end probe
 - **Open-source ready** — MIT license, CONTRIBUTING.md, issue/PR templates, GitHub Actions CI + release workflows, Firebase Analytics build-optional, product flavors (full w/ Firebase + FOSS without)
 
@@ -227,8 +228,8 @@ User (Telegram) <--HTTPS--> Telegram API <--polling--> Node.js Gateway (on phone
 
 | Metric | Count |
 |--------|-------|
-| Total commits | 385 |
-| PRs merged | 260+ |
+| Total commits | 396 |
+| PRs merged | 267+ |
 | Tools | 56 (9 Jupiter, 13 Android bridge, web search/fetch, memory, cron, skill_install, etc.) + MCP dynamic |
 | Skills | 35 (20 bundled + 13 workspace + 2 user-created) |
 | Android Bridge endpoints | 18+ |
@@ -269,6 +270,14 @@ User (Telegram) <--HTTPS--> Telegram API <--polling--> Node.js Gateway (on phone
 
 | Date | Feature | PR |
 |------|---------|-----|
+| 2026-03-19 | Chore: bump v1.7.0 (code 14) + changelog | direct |
+| 2026-03-19 | Fix: System screen Material Design polish — M3 spacing, removed accent bars (BAT-464) | #265–267 |
+| 2026-03-19 | Docs: update CLAUDE.md + add SKILL-FORMAT.md | direct |
+| 2026-03-18 | Fix: dashboard metrics honesty — relabel Device Memory/Storage, last message, app storage breakdown (BAT-463) | #264 |
+| 2026-03-18 | Feat: port OpenClaw cron reliability improvements — zombie detection, missed recovery, atomic writes (BAT-461) | #263 |
+| 2026-03-18 | Fix: setup token billing attribution for Sonnet/Opus access (BAT-460) | #262 |
+| 2026-03-18 | Fix: settings screen UI polish — merged Preferences+Permissions, collapsible state preserved (BAT-459) | #261 |
+| 2026-03-17 | Docs: SAB-AUDIT-v13 — OpenRouter provider door, playbook fix | direct |
 | 2026-03-17 | Feat: OpenRouter provider — JS adapter + streaming parser, Kotlin UI (BAT-447) | #260 |
 | 2026-03-14 | Feat: context token estimation + adaptive trimming (BAT-449) | #259 |
 | 2026-03-14 | Fix: empty system prompt block breaks session summary + vision (BAT-448) | #258 |
