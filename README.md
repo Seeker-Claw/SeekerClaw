@@ -121,7 +121,7 @@ SeekerClaw gives an AI agent real capabilities on your phone — including walle
 
 ## Community
 
-Special thanks to all clawtributors:
+Thanks to all contributors:
 
 <a href="https://github.com/sepivip"><img src="https://github.com/sepivip.png" width="50" height="50" alt="sepivip" title="sepivip — creator"></a>
 <a href="https://github.com/DashLabsDev"><img src="https://github.com/DashLabsDev.png" width="50" height="50" alt="DashLabsDev" title="DashLabsDev — code contributor"></a>
