@@ -731,9 +731,9 @@ async daily_note(input, chatId) {
 
 ## Feature 5: Deferred Tool Loading (P2)
 
-**Priority:** P2 — Optimization. Lower priority, higher complexity.
-**Effort:** Large (~150 lines new code, ~40 lines modifications across 3 files)
-**Risk:** High — fundamentally changes tool discovery, adds latency per tool use, may degrade quality
+**Priority:** P1 — Critical for OpenRouter/OpenAI cost savings. Per-provider strategy.
+**Effort:** Medium (~100 lines new code, ~30 lines modifications — simpler with adapter pattern)
+**Risk:** Medium — only affects non-Claude providers; Claude behavior unchanged
 
 ### Problem
 
@@ -951,27 +951,32 @@ Honest evaluation of each feature's risks, trade-offs, and whether it should act
 - **Key risk: false positives.** A regex might strip useful content. Mitigation: patterns are narrowly targeted (tool narration, file uploads, temp paths, message IDs). The content "Bitcoin hit $95K" or "User prefers dark mode" will never match these patterns. And if the entire content is scrubbed, we skip the save rather than saving empty content.
 - **Production risk: minimal.** Ship with `SCRUB_ENABLED = true`. If users report missing memories, set to `false` and investigate.
 
-### Feature 5: Deferred Tool Loading — DO NOT BUILD (yet)
+### Feature 5: Deferred Tool Loading — PER-PROVIDER STRATEGY
 
-**Verdict: NO for now. Revisit when tool count exceeds 150+ or context windows shrink.**
+**Verdict: BUILD — but only for non-Claude providers. Claude keeps full schemas + caching.**
 
-**Reasons to defer:**
+**Strategy:**
+- **Claude:** Full tool schemas + `cache_control: { type: 'ephemeral' }` on last tool. Already efficient. No change.
+- **OpenAI / OpenRouter:** Deferred tool loading. Send only 5 always-available tools + `tool_search`. ~80% token savings.
 
-1. **Claude prompt caching negates the primary benefit.** With `cache_control: { type: 'ephemeral' }` (already implemented), tool schemas are cached after the first API call. Subsequent calls in the same turn pay ~10% of the token cost. The "40KB every call" problem is already 90% solved.
+**Why per-provider works:**
+1. The adapter pattern already handles per-provider tool formatting via `formatTools()`.
+2. Claude users see zero change — same behavior, same caching, same quality.
+3. OpenRouter users (growing segment, 100+ models, no prompt caching) get massive savings.
 
-2. **Two-step overhead makes tool-heavy conversations MORE expensive.** For a turn with 5 tool calls, deferred loading adds 5 extra API round-trips (one `tool_search` per tool). That's 5 additional API calls at ~500 tokens each = 2,500 extra tokens — likely more than the cached schema cost.
+**Implementation:**
+```javascript
+// In claude.js, before tool formatting (line 1723):
+const useDeferredTools = PROVIDER !== 'claude';
+const toolsToSend = useDeferredTools
+    ? filterToAlwaysAvailable(rawTools)  // 5 core + tool_search + discovered this turn
+    : rawTools;                           // All 80+ tools (Claude caches these)
+```
 
-3. **Quality degradation.** Without full tool schemas in context, the model must reason about tool capabilities from one-line descriptions. It may choose the wrong tool, pass incorrect arguments, or miss the right tool entirely. This is a regression in agent capability for a marginal token savings.
-
-4. **Complexity.** The feature touches 3 files, adds conditional logic to the hot path, requires a `discoveredTools` set that persists across iterations, and needs careful system prompt engineering. The maintenance burden is disproportionate to the benefit.
-
-5. **The real solution is prompt caching + tool pruning.** If certain tools are unused (analytics show <1% usage), remove them from the TOOLS array. This reduces schema size permanently without adding complexity.
-
-**When to reconsider:**
-- If tool count grows to 150+ (from MCP server proliferation)
-- If a provider drops prompt caching support
-- If context window sizes shrink (unlikely — the trend is expansion)
-- If mobile network costs (per-byte) become a concern
+**Remaining risks:**
+- OpenRouter models may struggle with `tool_search` — needs good system prompt guidance
+- First tool use takes 2 round-trips instead of 1
+- `discoveredTools` set must persist across iterations within a turn
 
 ---
 
@@ -985,11 +990,11 @@ Phase 1 (Ship together):
   [4] Memory Scrubbing (P1)   ← No dependencies, standalone function
 
 Phase 2 (Ship together, after Phase 1 is stable):
+  [5] Deferred Tool Loading (P1) ← Per-provider: OpenAI/OpenRouter only, Claude unchanged
   [3] Clarification Tool (P1) ← No dependencies, but changes message interception
-  [2] Context Summarization (P1) ← Depends on provider adapter stability
 
-Phase 3 (Deferred):
-  [5] Deferred Tool Loading (P2) ← Not recommended for now
+Phase 3 (After real usage data):
+  [2] Context Summarization (P2) ← Already have adaptiveTrim, build when users report context loss
 ```
 
 ### Dependency Graph
@@ -1013,7 +1018,7 @@ Deferred Tool Loading ─┬─ tool_search requires all tools accessible
 
 2. **Clarification Tool + Context Summarization second:** Both modify core code paths (message interception, tool loop). They should be shipped after Phase 1 is stable in production to avoid debugging overlapping changes. The Clarification Tool should land first within Phase 2 because it's lower risk (follows existing confirmation pattern).
 
-3. **Deferred Tool Loading last (or never):** The cost-benefit analysis doesn't justify the complexity for the current tool count and caching setup.
+3. **Context Summarization last:** We already have `adaptiveTrim()`. Build summarization when users report "the agent forgot what we discussed" — real evidence vs theoretical improvement.
 
 ---
 
@@ -1022,17 +1027,18 @@ Deferred Tool Loading ─┬─ tool_search requires all tools accessible
 | # | Feature | Priority | Effort | Risk | New Lines | Modified Lines | Files Changed | Recommended |
 |---|---------|----------|--------|------|-----------|----------------|---------------|-------------|
 | 1 | Loop Detection | P0 | Small | Low | ~60 | ~15 | 2 (`loop-detector.js` new, `claude.js`) | YES |
-| 2 | Context Summarization | P1 | Medium | Medium | ~80 | ~15 | 2 (`claude.js`, `config.js`) | YES (flag off) |
-| 3 | Clarification Tool | P1 | Medium | Medium | ~100 | ~25 | 4 (`tools/system.js`, `tools/index.js`, `main.js`, `claude.js`) | YES |
 | 4 | Memory Session Scrubbing | P1 | Small | Low | ~40 | ~10 | 1 (`tools/memory.js`) | YES |
-| 5 | Deferred Tool Loading | P2 | Large | High | ~150 | ~40 | 4 (`tools/system.js`, `claude.js`, `config.js`, `main.js`) | NO (defer) |
+| 5 | Deferred Tool Loading | P1 | Medium | Medium | ~100 | ~30 | 3 (`tools/system.js`, `claude.js`, `config.js`) | YES (OpenAI/OpenRouter only) |
+| 3 | Clarification Tool | P1 | Medium | Medium | ~100 | ~25 | 4 (`tools/system.js`, `tools/index.js`, `main.js`, `claude.js`) | YES |
+| 2 | Context Summarization | P2 | Medium | Medium | ~80 | ~15 | 2 (`claude.js`, `config.js`) | DEFER (build on user demand) |
 
-**Total recommended effort:** ~280 new lines + ~65 modified lines across 6 files (excluding Feature 5).
+**Total recommended effort:** ~300 new lines + ~80 modified lines across 7 files.
 
 **Estimated timeline:**
 - Phase 1 (Features 1 + 4): 1 day implementation + 1 day testing = 2 days
-- Phase 2 (Features 3 + 2): 2 days implementation + 2 days testing = 4 days
-- Total: ~1 week for all 4 recommended features
+- Phase 2 (Features 5 + 3): 2 days implementation + 2 days testing = 4 days
+- Phase 3 (Feature 2): On demand, ~2 days when needed
+- Total: ~1 week for Phase 1 + 2
 
 **Token cost impact:**
 - Loop Detection: **saves** $0.25-2.50 per stuck loop (estimated 10-50 loops/day across all users)
