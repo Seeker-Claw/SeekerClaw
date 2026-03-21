@@ -1875,18 +1875,11 @@ async function chat(chatId, userMessage, options = {}) {
             // DeerFlow P1: Strip tools on loop-break final iteration so model can only respond with text
             // DeerFlow P2: Per-provider tool strategy — Claude gets full schemas + caching,
             // OpenAI/OpenRouter get deferred loading with core tools + tool_search
+            // DeerFlow P2: Deferred tool loading DISABLED — free/small OpenRouter models
+            // can't handle tool_search discovery pattern (leak raw XML instead of proper calls).
+            // Re-enable per-model when we can detect tool-use capability from OpenRouter API.
             const rawTools = _loopFinalIteration ? [] : (_deps.getTools ? _deps.getTools() : []);
-            let toolsToSend;
-            if (PROVIDER === 'claude' || _loopFinalIteration) {
-                // Claude: full schemas + prompt caching (already efficient)
-                toolsToSend = rawTools;
-            } else {
-                // OpenAI/OpenRouter: deferred loading — core tools + discovered tools
-                const ALWAYS_AVAILABLE = new Set(['read', 'write', 'web_search', 'web_fetch', 'datetime', 'tool_search']);
-                const discovered = (global._discoveredToolsByChat && global._discoveredToolsByChat.get(chatId)) || new Set();
-                toolsToSend = rawTools.filter(t => ALWAYS_AVAILABLE.has(t.name) || discovered.has(t.name));
-            }
-            const formattedTools = adapter.formatTools(toolsToSend);
+            const formattedTools = adapter.formatTools(rawTools);
 
             // Context token estimation: check usage before API call, adaptively trim if needed.
             // Cache systemChars for the turn (stable). toolChars recomputed each iteration
