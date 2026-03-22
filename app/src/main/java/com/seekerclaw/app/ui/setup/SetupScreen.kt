@@ -421,9 +421,13 @@ fun SetupScreen(onSetupComplete: () -> Unit) {
                     apiKeyError = null
                     errorMessage = null
                     authType = if (newProvider == "claude") existingConfig?.authType ?: "api_key" else "api_key"
-                    // Reset model to first available for new provider
+                    // Restore model: use existing config's model if same provider, else default
                     val models = modelsForProvider(newProvider)
-                    selectedModel = models.firstOrNull()?.id ?: OPENROUTER_DEFAULT_MODEL
+                    selectedModel = if (newProvider == existingConfig?.provider) {
+                        existingConfig.model
+                    } else {
+                        models.firstOrNull()?.id ?: OPENROUTER_DEFAULT_MODEL
+                    }
                 },
                 apiKey = apiKey,
                 onApiKeyChange = { newValue ->
