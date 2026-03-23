@@ -1,6 +1,6 @@
 // SeekerClaw — telegram.js
 // Telegram Bot API: messaging, file uploads/downloads, HTML formatting.
-// Depends on: config.js, web.js
+// Depends on: config.js, http.js
 
 const fs = require('fs');
 const https = require('https');
@@ -8,7 +8,7 @@ const path = require('path');
 
 const { BOT_TOKEN, log, workDir } = require('./config');
 const { redactSecrets } = require('./security');
-const { httpRequest } = require('./web');
+const { httpRequest } = require('./http');
 
 // ============================================================================
 // TELEGRAM API
