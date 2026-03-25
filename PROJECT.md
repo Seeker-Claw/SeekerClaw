@@ -33,7 +33,7 @@ SeekerClaw is an Android app built for the Solana Seeker phone (also works on an
 | AI Provider | Anthropic Claude API + OpenAI Responses API + OpenRouter Chat Completions | Claude Opus 4.6 default; OpenAI + OpenRouter via adapters |
 | Messaging | Telegram Bot API (grammy) | — |
 | Database | SQL.js (WASM SQLite) | 1.12.0 |
-| OpenClaw Parity | OpenClaw gateway (ported) | 2026.3.13-1 |
+| OpenClaw Parity | OpenClaw gateway (ported) | 2026.3.24 |
 | Web Search | Brave, Perplexity, Exa, Tavily, Firecrawl (single-provider) | — |
 | Wallet | Solana Web3.js + Jupiter API | — |
 | Build | Gradle (Kotlin DSL) | — |
@@ -56,6 +56,8 @@ SeekerClaw is an Android app built for the Solana Seeker phone (also works on an
 - **Setup token billing attribution** — Anthropic setup tokens (sk-ant-oat01-*) now work with Sonnet/Opus via CC_BILLING_HEADER in system prompt (BAT-460)
 - **Self-awareness system prompt** — Self-knowledge doors, architecture blocks, self-diagnosis playbook for troubleshooting tool failures and silent responses. Debug log rotation at 5MB with `.old` archive. DIAGNOSTICS.md deep troubleshooting guide. SAB-AUDIT-v13: 100% score (141/141 audit points)
 - **Structured log levels** — DEBUG/INFO/WARN/ERROR pipeline with per-level routing; UI log viewer color-coded by level; LogCollector filters noise from debug output
+- **Quick Actions** — `/quick` command sends Telegram inline keyboard with 6 preset one-tap buttons (Status, Portfolio, SOL Price, News Brief, My Tasks, Memory). Self-contained `quick-actions.js` module with single-source-of-truth button definitions.
+- **Search provider system** — Configurable web search backend (Exa, Tavily, Firecrawl, Brave, Perplexity) with per-provider API key management in Settings. Single-provider architecture — one active at a time.
 - **Skill routing** — Routing blocks prevent conflicting skills from firing together; reply tag first-token rule for reliable `[[reply_to_current]]` detection
 - **Skill requirements gating** — Skills with `requires.bins` or `requires.env` in YAML frontmatter are checked at runtime; unmet requirements are reported and skill is skipped
 
@@ -270,6 +272,12 @@ User (Telegram) <--HTTPS--> Telegram API <--polling--> Node.js Gateway (on phone
 
 | Date | Feature | PR |
 |------|---------|-----|
+| 2026-03-25 | Feat: Quick Actions — /quick command with inline keyboard (#279) | #295 |
+| 2026-03-25 | Docs: SAB-AUDIT-v15 — search provider door, web search diagnostics, tool count | direct |
+| 2026-03-24 | Feat: Search Provider System — remove DDG, add Exa/Tavily/Firecrawl (BAT-481) | #294 |
+| 2026-03-24 | Chore: bump OpenClaw parity to 2026.3.24 | direct |
+| 2026-03-24 | Docs: parity check 2026-03-25, agent identity flow, Metaplex research | direct |
+| 2026-03-23 | Fix: banner spacing — padding(bottom) on root element (BAT-479) | #291 |
 | 2026-03-19 | Chore: bump v1.7.0 (code 14) + changelog | direct |
 | 2026-03-19 | Fix: System screen Material Design polish — M3 spacing, removed accent bars (BAT-464) | #265–267 |
 | 2026-03-19 | Docs: update CLAUDE.md + add SKILL-FORMAT.md | direct |
