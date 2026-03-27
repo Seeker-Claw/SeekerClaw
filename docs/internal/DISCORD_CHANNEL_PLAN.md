@@ -50,6 +50,48 @@
 
 ---
 
+## Task 0: Rename `claude.js` → `ai.js` (Provider-Agnostic)
+
+**Files:**
+- Rename: `app/src/main/assets/nodejs-project/claude.js` → `ai.js`
+- Modify: `app/src/main/assets/nodejs-project/main.js` (line 134: `require('./claude')` → `require('./ai')`)
+- Modify: `app/src/main/assets/nodejs-project/providers/index.js` (line 34: `require('./claude')` → `require('./ai')`)
+- Modify: `app/src/main/assets/nodejs-project/tools/session.js` (line 10: `require('../claude')` → `require('../ai')`)
+- Modify: `app/src/main/assets/nodejs-project/tools/android.js` (line 12: `require('../claude')` → `require('../ai')`)
+
+The file handles all AI provider interactions (Claude, OpenAI, OpenRouter), not just Claude. Rename before building the channel layer since multiple new files will import from it.
+
+- [ ] **Step 1: Rename the file**
+
+```bash
+git mv app/src/main/assets/nodejs-project/claude.js app/src/main/assets/nodejs-project/ai.js
+```
+
+- [ ] **Step 2: Update all 4 require paths**
+
+- `main.js:134` — `require('./claude')` → `require('./ai')`
+- `providers/index.js:34` — `require('./claude')` → `require('./ai')`
+- `tools/session.js:10` — `require('../claude')` → `require('../ai')`
+- `tools/android.js:12` — `require('../claude')` → `require('../ai')`
+
+- [ ] **Step 3: Smoke test**
+
+```bash
+node --check app/src/main/assets/nodejs-project/ai.js
+node --check app/src/main/assets/nodejs-project/main.js
+node --check app/src/main/assets/nodejs-project/tools/session.js
+node --check app/src/main/assets/nodejs-project/tools/android.js
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add -A
+git commit -m "refactor: rename claude.js → ai.js (multi-provider)"
+```
+
+---
+
 ## Task 1: Channel Abstraction Layer (`channels/index.js`)
 
 **Files:**
